@@ -594,10 +594,18 @@ void set_twiststamp(T & out)
     out.twist.linear.x = state_point.vel(0);
     out.twist.linear.y = state_point.vel(1);
     out.twist.linear.z = state_point.vel(2);    
-    // Measures 结构体定义于common_lib.h文件中
-    out.twist.angular.x = Measures.imu.back()->angular_velocity.x;
-    out.twist.angular.y = Measures.imu.back()->angular_velocity.y;
-    out.twist.angular.z = Measures.imu.back()->angular_velocity.z;
+    
+    // 添加安全检查，防止Measures.imu为空时的段错误
+    if (!Measures.imu.empty()) {
+        out.twist.angular.x = Measures.imu.back()->angular_velocity.x;
+        out.twist.angular.y = Measures.imu.back()->angular_velocity.y;
+        out.twist.angular.z = Measures.imu.back()->angular_velocity.z;
+    } else {
+        // 如果IMU数据为空，则将角速度设置为零
+        // out.twist.angular.x = 0.0;
+        // out.twist.angular.y = 0.0;
+        // out.twist.angular.z = 0.0;
+    }
 }
 
 void publish_odometry(const ros::Publisher & pubOdomAftMapped)
