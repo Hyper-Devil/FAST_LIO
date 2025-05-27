@@ -331,6 +331,9 @@ void Preprocess::velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
       
       for (int i = 0; i < plsize; i++)
       {
+        // 过滤掉无效点
+        if(isnan(pl_orig.points[i].x) || isnan(pl_orig.points[i].y) || isnan(pl_orig.points[i].z)) continue;
+        
         PointType added_pt;
         added_pt.normal_x = 0;
         added_pt.normal_y = 0;
@@ -400,6 +403,8 @@ void Preprocess::velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
     {
       for (int i = 0; i < plsize; i++)
       {
+        // 过滤掉无效点
+        if(isnan(pl_orig.points[i].x) || isnan(pl_orig.points[i].y) || isnan(pl_orig.points[i].z)) continue;
         PointType added_pt;
         // cout<<"!!!!!!"<<i<<" "<<plsize<<endl;
         
