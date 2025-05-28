@@ -620,14 +620,35 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
     auto P = kf.get_P();
     for (int i = 0; i < 6; i ++)
     {
-        int k = i < 3 ? i + 3 : i - 3;
-        odomAftMapped.pose.covariance[i*6 + 0] = P(k, 3);
-        odomAftMapped.pose.covariance[i*6 + 1] = P(k, 4);
-        odomAftMapped.pose.covariance[i*6 + 2] = P(k, 5);
-        odomAftMapped.pose.covariance[i*6 + 3] = P(k, 0);
-        odomAftMapped.pose.covariance[i*6 + 4] = P(k, 1);
-        odomAftMapped.pose.covariance[i*6 + 5] = P(k, 2);
+        // The state sequence of odomAftMapped.pose is (pos, rot)
+        // int k = i < 3 ? i + 3 : i - 3;
+        // odomAftMapped.pose.covariance[i*6 + 0] = P(k, 3);
+        // odomAftMapped.pose.covariance[i*6 + 1] = P(k, 4);
+        // odomAftMapped.pose.covariance[i*6 + 2] = P(k, 5);
+        // odomAftMapped.pose.covariance[i*6 + 3] = P(k, 0);
+        // odomAftMapped.pose.covariance[i*6 + 4] = P(k, 1);
+        // odomAftMapped.pose.covariance[i*6 + 5] = P(k, 2);
+        // https://github.com/hku-mars/FAST_LIO/issues/233
+        odomAftMapped.pose.covariance[i*6 + 0] = P(i, 0);
+        odomAftMapped.pose.covariance[i*6 + 1] = P(i, 1);
+        odomAftMapped.pose.covariance[i*6 + 2] = P(i, 2);
+        odomAftMapped.pose.covariance[i*6 + 3] = P(i, 3);
+        odomAftMapped.pose.covariance[i*6 + 4] = P(i, 4);
+        odomAftMapped.pose.covariance[i*6 + 5] = P(i, 5);
     }
+    // P(12, 12) to P(14, 14) should be the linear velocity state covariances
+    for (int i = 0; i < 3; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            odomAftMapped.twist.covariance[i*6 + j] = P(12 + i, 12 + j);
+        }
+    }
+    // Set angular velocity covariance (diagonal elements only)
+    for (int i = 3; i < 6; i++)
+    {
+        odomAftMapped.twist.covariance[i*6 + i] = gyr_cov;
+    }   
 
     static tf::TransformBroadcaster br;
     tf::Transform                   transform;
