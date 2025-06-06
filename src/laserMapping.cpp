@@ -140,6 +140,8 @@ geometry_msgs::PoseStamped msg_body_pose;
 shared_ptr<Preprocess> p_pre(new Preprocess());
 shared_ptr<ImuProcess> p_imu(new ImuProcess());
 
+ros::Publisher pubAccumulatedMap; // 新增：用于发布累积点云的发布者
+
 void SigHandle(int sig)
 {
     flg_exit = true;
@@ -504,8 +506,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
     if (pcd_save_en)
     {
         int size = feats_undistort->points.size();
-        PointCloudXYZI::Ptr laserCloudWorld( \
-                        new PointCloudXYZI(size, 1));
+        PointCloudXYZI::Ptr laserCloudWorld(new PointCloudXYZI(size, 1));
 
         for (int i = 0; i < size; i++)
         {
@@ -513,6 +514,35 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
                                 &laserCloudWorld->points[i]);
         }
         *pcl_wait_save += *laserCloudWorld;
+
+        // 发布累积的点云 - 在发布前对整个累积点云进行降采样，以控制大小
+        if (pubAccumulatedMap.getNumSubscribers() > 0)
+        {
+            static pcl::VoxelGrid<PointType> downSizeFilterForPublish;
+            static bool publish_filter_initialized = false;
+            if (!publish_filter_initialized)
+            {
+                // 为发布设置适当的叶子大小，以控制发布的点云大小
+                constexpr float publish_leaf_size = 0.15f; 
+                downSizeFilterForPublish.setLeafSize(publish_leaf_size, publish_leaf_size, publish_leaf_size);
+                publish_filter_initialized = true;
+            }
+            
+            PointCloudXYZI::Ptr publishCloud(new PointCloudXYZI());
+            downSizeFilterForPublish.setInputCloud(pcl_wait_save);
+            downSizeFilterForPublish.filter(*publishCloud);
+            
+            // 发布降采样后的点云
+            sensor_msgs::PointCloud2 accumulatedMapMsg;
+            pcl::toROSMsg(*publishCloud, accumulatedMapMsg);
+            accumulatedMapMsg.header.stamp = ros::Time().fromSec(lidar_end_time);
+            accumulatedMapMsg.header.frame_id = "camera_init";
+            pubAccumulatedMap.publish(accumulatedMapMsg);
+            
+            // 关键修改：使用降采样后的点云替换原始累积点云，以控制内存使用
+            pcl_wait_save->clear();
+            *pcl_wait_save = *publishCloud;
+        }
 
         static int scan_wait_num = 0;
         scan_wait_num ++;
@@ -904,6 +934,9 @@ int main(int argc, char** argv)
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
             ("/path", 100000);
 //------------------------------------------------------------------------------------------------------
+    // 新增：初始化累积点云发布者
+    pubAccumulatedMap = nh.advertise<sensor_msgs::PointCloud2>("/accumulated_map_points", 10);
+    
     signal(SIGINT, SigHandle);
     ros::Rate rate(5000);
     bool status = ros::ok();
