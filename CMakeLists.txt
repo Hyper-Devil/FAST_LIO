@@ -63,13 +63,32 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   pcl_ros
   tf
-  livox_ros_driver
+  livox_ros_driver2
   message_generation
   eigen_conversions
 )
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.8 REQUIRED)
+
+# MVS 安装后可能引入非系统 libusb，导致 PCL I/O 链接时缺少 libusb_set_option。
+# 这里优先绑定系统 libusb，且仅作用于 fastlio_mapping 目标。
+find_library(SYSTEM_LIBUSB_LIBRARY
+  NAMES usb-1.0
+  HINTS
+    /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+    /lib/${CMAKE_LIBRARY_ARCHITECTURE}
+)
+
+if(NOT SYSTEM_LIBUSB_LIBRARY)
+  find_library(SYSTEM_LIBUSB_LIBRARY NAMES usb-1.0)
+endif()
+
+if(NOT SYSTEM_LIBUSB_LIBRARY)
+  message(FATAL_ERROR "System libusb-1.0 not found")
+endif()
+
+message(STATUS "Using system libusb: ${SYSTEM_LIBUSB_LIBRARY}")
 
 message(STATUS "Eigen: ${EIGEN3_INCLUDE_DIR}")
 
@@ -112,6 +131,7 @@ target_link_libraries(fastlio_mapping
   ${catkin_LIBRARIES} 
   ${PCL_LIBRARIES} 
   ${PYTHON_LIBRARIES}
+  ${SYSTEM_LIBUSB_LIBRARY}
 )
 
 # 目标特定包含目录
