@@ -523,7 +523,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
             if (!publish_filter_initialized)
             {
                 // 为发布设置适当的叶子大小，以控制发布的点云大小
-                constexpr float publish_leaf_size = 0.15f; 
+                constexpr float publish_leaf_size = 0.25f; 
                 downSizeFilterForPublish.setLeafSize(publish_leaf_size, publish_leaf_size, publish_leaf_size);
                 publish_filter_initialized = true;
             }
@@ -532,11 +532,31 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFull)
             downSizeFilterForPublish.setInputCloud(pcl_wait_save);
             downSizeFilterForPublish.filter(*publishCloud);
             
-            // 发布降采样后的点云
+            // 将点云从camera_init坐标系转换到body坐标系
+            PointCloudXYZI::Ptr publishCloudBody(new PointCloudXYZI());
+            publishCloudBody->resize(publishCloud->size());
+            
+            // 使用state_point中的位姿信息进行逆变换：从camera_init到body
+            // camera_init -> body: p_body = R^T * (p_camera_init - t)
+            M3D rot_inv = state_point.rot.toRotationMatrix().transpose();
+            V3D pos_neg = -rot_inv * state_point.pos;
+            
+            for (size_t i = 0; i < publishCloud->size(); i++)
+            {
+                V3D p_camera_init(publishCloud->points[i].x, publishCloud->points[i].y, publishCloud->points[i].z);
+                V3D p_body = rot_inv * p_camera_init + pos_neg;
+                
+                publishCloudBody->points[i].x = p_body(0);
+                publishCloudBody->points[i].y = p_body(1);
+                publishCloudBody->points[i].z = p_body(2);
+                publishCloudBody->points[i].intensity = publishCloud->points[i].intensity;
+            }
+            
+            // 发布转换到body坐标系的降采样点云
             sensor_msgs::PointCloud2 accumulatedMapMsg;
-            pcl::toROSMsg(*publishCloud, accumulatedMapMsg);
+            pcl::toROSMsg(*publishCloudBody, accumulatedMapMsg);
             accumulatedMapMsg.header.stamp = ros::Time().fromSec(lidar_end_time);
-            accumulatedMapMsg.header.frame_id = "camera_init";
+            accumulatedMapMsg.header.frame_id = "body";
             pubAccumulatedMap.publish(accumulatedMapMsg);
             
             // 关键修改：使用降采样后的点云替换原始累积点云，以控制内存使用
